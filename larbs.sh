@@ -15,7 +15,7 @@ esac done
 
 # DEFAULTS:
 [ -z "$dotfilesrepo" ] && dotfilesrepo="https://github.com/rbuchberger/dotfiles"
-[ -z "$progsfile" ] && progsfile="https://raw.githubusercontent.com/rbuchberger/LARBS/master/progs.csv"
+[ -z "$progsfile" ] && progsfile="./progs.csv"
 [ -z "$aurhelper" ] && aurhelper="yay"
 
 ### FUNCTIONS ###
@@ -108,13 +108,14 @@ installationloop() { \
 		esac
 	done < /tmp/progs.csv ;}
 
-putgitrepo() { # Downlods a gitrepo $1 and places the files in $2 only overwriting conflicts
+clonedots() { # Downlods a gitrepo $1
 	dialog --infobox "Downloading and installing config files..." 4 60
-	dir=$(mktemp -d)
-	[ ! -d "$2" ] && mkdir -p "$2" && chown -R "$name:wheel" "$2"
-	chown -R "$name:wheel" "$dir"
-	sudo -u "$name" git clone --depth 1 "$1" "$dir/gitrepo" >/dev/null 2>&1 &&
-	sudo -u "$name" cp -rfT "$dir/gitrepo" "$2"
+
+  # Install yadm
+  aurinstall yadm "Installing YADM, a configuration management tool."
+
+  # Clone the dots
+  sudo -u "$name" yadm clone $1
 	}
 
 serviceinit() { for service in "$@"; do
@@ -177,18 +178,14 @@ sed -i "s/-j2/-j$(nproc)/;s/^#MAKEFLAGS/MAKEFLAGS/" /etc/makepkg.conf
 
 manualinstall $aurhelper || error "Failed to install AUR helper."
 
+# Install the dotfiles in the user's home directory
+clonedots "$dotfilesrepo"
+
 # The command that does all the installing. Reads the progs.csv file and
 # installs each needed program the way required. Be sure to run this only after
 # the user has been created and has priviledges to run sudo without a password
 # and all build dependencies are installed.
 installationloop
-
-# Install the dotfiles in the user's home directory
-putgitrepo "$dotfilesrepo" "/home/$name"
-rm "/home/$name/README.md" "/home/$name/LICENSE"
-
-# Install the LARBS Firefox profile in ~/.mozilla/firefox/
-putgitrepo "https://github.com/LukeSmithxyz/mozillarbs.git" "/home/$name/.mozilla/firefox"
 
 # Pulseaudio, if/when initially installed, often needs a restart to work immediately.
 [ -f /usr/bin/pulseaudio ] && resetpulse
@@ -208,9 +205,6 @@ systembeepoff
 # several important commands, `shutdown`, `reboot`, updating, etc. without a password.
 newperms "%wheel ALL=(ALL) ALL #LARBS
 %wheel ALL=(ALL) NOPASSWD: /usr/bin/shutdown,/usr/bin/reboot,/usr/bin/systemctl suspend,/usr/bin/wifi-menu,/usr/bin/mount,/usr/bin/umount,/usr/bin/systemctl restart NetworkManager,/usr/bin/rc-service NetworkManager restart,/usr/bin/loadkeys"
-
-# Hopefully this works:
-nitrogen --restore &
 
 # Last message! Install complete!
 finalize
